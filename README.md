@@ -191,7 +191,7 @@ format: json
       "post": "",
       "pre": ""
     },
-    onlyone: false
+    "onlyone": false
   }
 }
 ```
