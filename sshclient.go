@@ -26,16 +26,15 @@ var sshChippers = []string{
 	"3des-cbc", "blowfish-cbc", "twofish-cbc", "twofish256-cbc", "twofish192-cbc", "twofish128-cbc", "aes256-cbc", "aes192-cbc", "aes128-cbc", "arcfour",
 }
 
-//connect and run command, return []byte
-func SshClientRun(device *Device) ([]byte, error) {
-
+// SshClientConfig builds the ssh client configuration for a device.
+func SshClientConfig(device *Device) (*ssh.ClientConfig, error) {
 	auth, err := SshClientDeviceAuth(device)
 	if err != nil {
-		return []byte{}, err
+		return nil, err
 	}
-	device.LogDebug(fmt.Sprintf("SshClientRun: Get auth (%t)", auth))
+	device.LogDebug(fmt.Sprintf("SshClientConfig: Get auth (%t)", auth))
 
-	config := &ssh.ClientConfig{
+	return &ssh.ClientConfig{
 		Config: ssh.Config{
 			KeyExchanges: sshkkeysAlgo,
 			Ciphers:      sshChippers,
@@ -44,8 +43,19 @@ func SshClientRun(device *Device) ([]byte, error) {
 		Auth:            auth,
 		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
 		Timeout:         time.Duration(device.Timeout) * time.Second,
+	}, nil
+}
+
+// connect and run command, return []byte
+func SshClientRun(device *Device) ([]byte, error) {
+
+	config, err := SshClientConfig(device)
+	if err != nil {
+		return []byte{}, err
 	}
-	address := SshAddressFormat(device)
+	device.LogDebug(fmt.Sprintf("SshClientRun: Get auth methods (%d)", len(config.Auth)))
+
+	address := DeviceAddressFormat(device)
 	client, err := ssh.Dial("tcp", address, config)
 	if err != nil {
 		return nil, errors.New("SshClientRun: DialSSH error:" + err.Error())
@@ -68,7 +78,7 @@ func SshClientRun(device *Device) ([]byte, error) {
 	return b.Bytes(), nil
 }
 
-//prepare auth method for client
+// prepare auth method for client
 func SshClientDeviceAuth(device *Device) ([]ssh.AuthMethod, error) {
 	var auth []ssh.AuthMethod
 	if device.Authkey == false {
@@ -92,8 +102,22 @@ func SshClientDeviceAuth(device *Device) ([]ssh.AuthMethod, error) {
 	return auth, nil
 }
 
-func SshAddressFormat(device *Device) string {
-	str := fmt.Sprintf("%s:%d", device.Address, device.PortSSH)
-	device.LogDebug(fmt.Sprintf("SshAddressFormat: addres (%s)", str))
+func DeviceAddressFormat(device *Device) string {
+	port := device.Port
+	if port == 0 {
+		// Device did not go through SetDefaultParameter (tests, manual calls).
+		port = device.PortSSH
+		if normalizeProtocol(device.Protocol) == ProtocolTelnet {
+			port = device.PortTelnet
+			if port == 0 {
+				port = telnetDefaultPort
+			}
+		}
+		if port == 0 {
+			port = 22
+		}
+	}
+	str := fmt.Sprintf("%s:%d", device.Address, port)
+	device.LogDebug(fmt.Sprintf("DeviceAddressFormat: addres (%s)", str))
 	return str
 }

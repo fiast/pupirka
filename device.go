@@ -73,8 +73,10 @@ func (device *Device) Hook() {
 		return
 	}
 	device.LogDebug(fmt.Sprintf("Hook '%s': Command for hook '%s': Device %s", device.StatusJob, command, device.Name))
-	rVariable := []string{"%name", "%parent", "%filename", "%address", "%portssh"}
-	rValue := []string{device.Name, device.Parent, device.BackupFileName, device.Address, fmt.Sprintf("%d", device.PortSSH)}
+	// "%portssh" and "%porttelnet" must stay before "%port", strings.Replacer
+	// matches in argument order and "%port" is a prefix of both.
+	rVariable := []string{"%name", "%parent", "%filename", "%address", "%portssh", "%porttelnet", "%port", "%protocol"}
+	rValue := []string{device.Name, device.Parent, device.BackupFileName, device.Address, fmt.Sprintf("%d", device.PortSSH), fmt.Sprintf("%d", device.PortTelnet), fmt.Sprintf("%d", device.Port), device.Protocol}
 	execCommand := strings.NewReplacer(zipStringsForReplacer(rVariable, rValue)...).Replace(command)
 	device.LogDebug(fmt.Sprintf("Hook '%s': Command Compile for hook '%s': Device %s", device.StatusJob, execCommand, device.Name))
 	execComandi := strings.Fields(execCommand)
