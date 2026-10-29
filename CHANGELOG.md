@@ -1,4 +1,23 @@
 # Changelog
+## v0.8 (2026-10-29)
+**Implemented enhancements:**
+- add telnet support: device parameter `"protocol": "telnet"`, ssh remains the default
+- add device parameters `protocol`, `porttelnet`, `prompt`, `initcommand`, `enablepassword`, `idletimeout`, `commandtimeout`
+- add automatic pager handling for telnet (`--More--`, `<--- More --->`, `Press any key`)
+- add unit tests: login dialogue, prompt detection, output cleaning, protocol dispatch, tunnel lifecycle
+
+**Fixed bugs:**
+- ssh port forward: panic when the ssh connection to the parent failed
+- ssh port forward: readiness race between the local listener and the first dial
+- ssh port forward: listener and port leak after the backup
+- `SshAddressFormat` is now `DeviceAddressFormat` and honours the resolved port
+- `fmt.Sprintf(err.Error())` in `ScanDevice` (go vet: non-constant format string)
+
+**Notes:**
+- `key` is not supported for telnet devices and is ignored with a warning
+- telnet traffic is not encrypted, see the security warning in the README
+- verified on TP-Link T2600G-28TS (`User:` prompt, `Press any key to continue (Q to quit)` pager, lone `#` section separators) and BDCOM P3310B (`--More--` pager, `enable` + `terminal length 0`)
+
 ## v0.7 (2020-02-02)
 **Implemented enhancements:**
 - add git remote save push and pull

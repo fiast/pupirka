@@ -21,8 +21,7 @@ func ScanDevice() {
 
 	files, err := ioutil.ReadDir(dir)
 	if err != nil {
-		es := fmt.Sprintf(err.Error())
-		LogConsole.Error(es)
+		LogConsole.Error(err.Error())
 		LogConsole.Error("Program exit")
 		os.Exit(1)
 	}
@@ -168,6 +167,16 @@ func backup(device *Device) {
 	device.LogDebug("Starting backup ", device.Name)
 	var bytefromsshclient []byte
 
+	run, rerr := runnerFor(device)
+	if rerr != nil {
+		ers := fmt.Sprintf("Fatal error Device:%s: %s", device.Name, rerr.Error())
+		LogConsole.Error(ers)
+		device.LogError(ers)
+		device.StatusJob = "error"
+		return
+	}
+	device.LogDebug("backup: protocol ", device.Name, device.Protocol)
+
 	if device.Parent != "" {
 		device.LogDebug("backup: parent exist ", device.Name)
 		parent, child, err := SshNeedForward(device)
@@ -179,9 +188,17 @@ func backup(device *Device) {
 			return
 		}
 
-		newd := SshForwardNewDevice(parent, child)
+		newd, stopForward, ferr := SshForwardNewDevice(parent, child)
+		if ferr != nil {
+			ers := fmt.Sprintf("Fatal error Device:%s start forward via parent %s: %s", device.Name, device.Parent, ferr.Error())
+			LogConsole.Error(ers)
+			device.LogError(ers)
+			device.StatusJob = "error"
+			return
+		}
+		defer stopForward()
 
-		bytefromsshclient, err = SshClientRun(&newd)
+		bytefromsshclient, err = run(&newd)
 		if err != nil {
 			ers := fmt.Sprintf("Fatal error Forward Device:%s: %s", device.Name, err.Error())
 			LogConsole.Error(ers)
@@ -191,7 +208,7 @@ func backup(device *Device) {
 		}
 	} else {
 		device.LogDebug("backup: no parent ", device.Name)
-		bytefromssh, err := SshClientRun(device)
+		bytefromssh, err := run(device)
 		if err != nil {
 			ers := fmt.Sprintf("Fatal error Device:%s: %s", device.Name, err.Error())
 			LogConsole.Error(ers)
@@ -320,6 +337,49 @@ func SetDefaultParameter(d *Device) {
 		d.Command = ConfigV.GetString("devicedefault.command")
 		d.LogDebug("SetDefaultParameter: Set default Command ", d.Name, d.Command)
 	}
+
+	// protocol: "" and "ssh" keep the historical behaviour, "telnet" switches backend.
+	d.Protocol = normalizeProtocol(d.Protocol)
+	if d.Protocol == "" {
+		d.Protocol = normalizeProtocol(ConfigV.GetString("devicedefault.protocol"))
+	}
+	if d.Protocol == "" {
+		d.Protocol = ProtocolSSH
+	}
+	if !allowedProtocol(d.Protocol) {
+		d.LogError(fmt.Sprintf("SetDefaultParameter: unknown protocol %q for device %s, backup will fail", d.Protocol, d.Name))
+	}
+	d.LogDebug("SetDefaultParameter: Set protocol ", d.Name, d.Protocol)
+
+	if d.PortTelnet == 0 {
+		p := ConfigV.GetInt("devicedefault.porttelnet")
+		if p <= 0 || p > 65535 {
+			p = telnetDefaultPort
+		}
+		d.PortTelnet = uint16(p)
+		d.LogDebug("SetDefaultParameter: Set default PortTelnet ", d.Name, d.PortTelnet)
+	}
+	if d.Prompt == "" {
+		d.Prompt = ConfigV.GetString("devicedefault.prompt")
+	}
+	if d.InitCommand == "" {
+		d.InitCommand = ConfigV.GetString("devicedefault.initcommand")
+	}
+	if d.EnablePassword == "" {
+		d.EnablePassword = ConfigV.GetString("devicedefault.enablepassword")
+	}
+	if d.IdleTimeout == 0 {
+		d.IdleTimeout = ConfigV.GetInt("devicedefault.idletimeout")
+	}
+	if d.CommandTimeout == 0 {
+		d.CommandTimeout = ConfigV.GetInt("devicedefault.commandtimeout")
+	}
+	if d.IdleTimeout == 0 {
+		d.IdleTimeout = d.Timeout
+	}
+	if d.CommandTimeout == 0 {
+		d.CommandTimeout = d.Timeout
+	}
 	if d.PortSSH == 0 {
 		d.LogDebug("SetDefaultParameter: Set default PortSSH", d.Name)
 		p, err := strconv.Atoi(ConfigV.GetString("devicedefault.portshh"))
@@ -339,20 +399,28 @@ func SetDefaultParameter(d *Device) {
 		}
 	}
 	d.Authkey = false
-	if d.Key != "" {
-		d.LogDebug("SetDefaultParameter: Need use private key uniq ", d.Name, d.Key)
-		d.Authkey = true
-	}
+	if d.Protocol == ProtocolTelnet {
+		// Telnet has no key based authentication, do not inherit devicedefault.key.
+		if d.Key != "" {
+			d.LogWarn(fmt.Sprintf("SetDefaultParameter: \"key\" is not supported for telnet device %s, field ignored", d.Name))
+		}
+		d.Key = ""
+	} else {
+		if d.Key != "" {
+			d.LogDebug("SetDefaultParameter: Need use private key uniq ", d.Name, d.Key)
+			d.Authkey = true
+		}
 
-	if d.Authkey == false && d.Password == "" && d.Key != "" {
-		d.LogDebug("SetDefaultParameter: Need use private key uniq ", d.Name, d.Key)
-		d.Authkey = true
-	}
-	if d.Authkey == false && d.Password == "" && d.Key == "" && ConfigV.GetString("devicedefault.key") != "" {
+		if d.Authkey == false && d.Password == "" && d.Key != "" {
+			d.LogDebug("SetDefaultParameter: Need use private key uniq ", d.Name, d.Key)
+			d.Authkey = true
+		}
+		if d.Authkey == false && d.Password == "" && d.Key == "" && ConfigV.GetString("devicedefault.key") != "" {
 
-		d.Authkey = true
-		d.Key = ConfigV.GetString("devicedefault.key")
-		d.LogDebug("SetDefaultParameter: Need use private key default ", d.Name, d.Key)
+			d.Authkey = true
+			d.Key = ConfigV.GetString("devicedefault.key")
+			d.LogDebug("SetDefaultParameter: Need use private key default ", d.Name, d.Key)
+		}
 	}
 
 	if d.TimeFormat == "" {
@@ -373,6 +441,15 @@ func SetDefaultParameter(d *Device) {
 		d.Clearstring = ConfigV.GetString("devicedefault.clearstring")
 		d.LogDebug("SetDefaultParameter: Set default Clear string", d.Name, d.Clearstring)
 	}
+	// Port is the resolved port both backends dial. SSH port forwarding
+	// overwrites it with the local tunnel port, so the backends never have to
+	// know whether the device is reached directly or through a parent.
+	d.Port = d.PortSSH
+	if d.Protocol == ProtocolTelnet {
+		d.Port = d.PortTelnet
+	}
+	d.LogDebug("SetDefaultParameter: Set resolved Port ", d.Name, d.Port)
+
 	d.Dirbackup = fmt.Sprintf("%s/%s", ConfigV.GetString("path.backup"), d.Name)
 	ditetimestring := time.Now().Format(d.TimeFormat)
 	nameinprefix := strings.ReplaceAll(d.FileNameFormat, "%p", d.Prefix)

@@ -1,15 +1,15 @@
 # Pupirka
 
-(Simple Backup over SSH)
+(Simple Backup over SSH and Telnet)
 ---
 
 Author @vasilevkirill [My Web Site](https://vasilevkirill.ru)
 
-Pupirka is a Application for simple execute command in ssh server and response save in file, supported SSH LocalPort Forward.
+Pupirka is a Application for simple execute command on a network device and response save in file, supported SSH LocalPort Forward. A device is reached over SSH by default, or over Telnet when `"protocol": "telnet"` is set.
 
  - Pupirka - this not service
- - Pupirka - this not used external library
- - Pupirka - running one binary and save backup from all MikroTik or other devices
+ - Pupirka - a single binary with a few small Go modules (see `go.mod`)
+ - Pupirka - running one binary and save backup from all MikroTik, Cisco, Eltex, TP-Link or other devices
  - Pupirka - Supported all Operating System if supported Golang
 
 ## Contents
@@ -23,6 +23,7 @@ Pupirka is a Application for simple execute command in ssh server and response s
     - [Quick Start](#quick-start)
     - [Device Settings](#device-all-parameter)
       - [Device Hook](#device-hook)
+      - [Telnet](#telnet)
     - [Config Pupirka](#puprik-config)
       - [Device Default Parameter](#devicedefault)
       - [Logging](#log)
@@ -87,13 +88,20 @@ Running command `/export` (Default) and saved response in file `./backup/mydevic
 ```json
 {
   "address": "111.222.223.222",
+  "protocol": "telnet",
+  "porttelnet": 23,
   "username": "backupuserssh",
   "password": "asdlmhas,o9duajsp9odj",
   "portssh": 22,
   "timeout": 10,
+  "commandtimeout": 60,
+  "idletimeout": 10,
   "every": 3600,
   "rotate": 730,
   "parent": "mydevice-02",
+  "prompt": "\\[admin@MikroTik\\] >",
+  "initcommand": "enable",
+  "enablepassword": "",
   "timeformat": "20060102T1504",
   "prefix": "rootR1-",
   "filenameformat": "%p%t.rcs",
@@ -110,15 +118,22 @@ Running command `/export` (Default) and saved response in file `./backup/mydevic
 All supported parameter in `json` file for device
 
  - `portssh` - if your device running or access not 22 (default) port ssh, set needed tcp port.
- - `timeout` - if your device very slow response, set needed time wait in second.
+ - `protocol` - how to reach the device: `"ssh"` (default) or `"telnet"`. Device files without this field keep working over SSH.
+ - `porttelnet` - tcp port for telnet, 23 by default.
+ - `timeout` - if your device very slow response, set needed time wait in second. Used for connecting and for the login dialogue.
+ - `commandtimeout` - how long to wait for the command output (seconds). Default is `timeout`. Telnet only.
+ - `idletimeout` - how long to wait for any byte from the device before saving what arrived (seconds). Default is `timeout`. Telnet only.
  - `every` - how often to backup, check the time of the last file and if the difference with the current time is greater than the time of the file, a backup will be created.
  - `rotate` - delete old files backups older than days. (in order not to accidentally delete all backups, the deletion will occur if ONLY the count of backup files is more than (5) five files.)
- - `command` - execute command on remote device, if you need backup only firewall in mikrotik (`/ip firewall export`)
- - `parent` - if your devices are behind the device and are not directly accessible, you can use this parameter. Specify the name of the device through which you want to establish a connection.
+ - `command` - execute command on remote device, if you need backup only firewall in mikrotik (`/ip firewall export`). For telnet the command is typed into an interactive session, so vendor syntax applies (`show running-config` on Cisco/Eltex, `show running-config` or `/export` on MikroTik).
+ - `prompt` - telnet only: regular expression of the device prompt, for example `"\\[admin@.*\\] >"`. Empty value uses built-in patterns (MikroTik, Cisco, Eltex, TP-Link, BDCOM style).
+ - `initcommand` - telnet only: preparation commands executed after login, before `command`. Several commands can be separated with `;`, for example `"enable;terminal length 0"`.
+ - `enablepassword` - telnet only: password to answer an `enable` password prompt caused by `initcommand`.
+ - `parent` - if your devices are behind the device and are not directly accessible, you can use this parameter. Specify the name of the device through which you want to establish a connection. The parent device itself must be reachable over SSH; the tunnel works for telnet devices too.
  - `timeformat` - as generate time string in file backup. ([Read documentation and example](#time-format))
  - `prefix` - adding prefix in file name backups.
  - `filename` - position `prefix` and `time` in file name. `%p` replaced `prefix` and `%t` replaced current time, %n replaced device name
- - `key` - Private Key for used SSH Authorized, need saved private key in folder `./keys`. (**if need used SSH keys, need `password` filed delete or set `""`**)
+ - `key` - Private Key for used SSH Authorized, need saved private key in folder `./keys`. (**if need used SSH keys, need `password` filed delete or set `""`**). Telnet devices ignore this field.
  - `clearstring` - Specify the character to start with the line to delete.
  - `hook` - Execute command in os.
 
@@ -141,6 +156,53 @@ this string can be used next arguments
 
 Pupirka **NOT** Wait execute command for devices.
 
+### Telnet
+
+Some devices have SSH disabled or do not support it at all. Set `"protocol": "telnet"` in the device file to back them up over Telnet:
+
+```json
+{
+  "address": "192.0.2.10",
+  "protocol": "telnet",
+  "porttelnet": 23,
+  "username": "admin",
+  "password": "secret",
+  "command": "show running-config",
+  "initcommand": "enable;terminal length 0",
+  "commandtimeout": 60,
+  "idletimeout": 15
+}
+```
+
+How a Telnet session runs:
+
+1. connect to `address:porttelnet` (23 by default);
+2. wait for `Login:`, `User:`, `User Name:` or `Username:` and `Password:`, answer from the device file;
+3. run every `initcommand` (separated by `;`) and wait for the prompt again;
+4. send `command` and read until the prompt;
+5. strip the command echo, ANSI escapes, pager markers and the prompt, save the rest.
+
+The end of the output is detected by the prompt. Without a `prompt` field the built-in patterns are used; they cover MikroTik (`[admin@MikroTik] >`), Cisco (`Router>`, `Router#`, `Router(config)#`), Eltex, TP-Link and BDCOM (`hostname#`) style prompts. A lone `#` that TP-Link and Eltex print as a section separator is never taken for a prompt. If the device prompt does not match, pupirka writes a warning to the device log and saves what arrived when `idletimeout` fires, so set `prompt` explicitly in that case.
+
+Long output (`--More--`, `<--- More --->`, `Press any key to continue (Q to quit)`) is answered automatically with a space, also when the marker is split between two TCP packets. Disabling paging in `initcommand` (`terminal length 0` on Cisco/Eltex/BDCOM) is still faster and more reliable.
+
+**Security warning:** Telnet sends the login, the password and the configuration **unencrypted**. Anyone on the path can read them. Use Telnet only on a management network you trust, or keep SSH where possible. Prefer `parent` (an SSH tunnel) when the Telnet device is far away.
+
+Limitations:
+
+ - `key` is ignored for telnet devices (a warning is written to the log) - Telnet has no key authentication;
+ - `parent` works only if the parent device itself is reachable over SSH;
+ - prompt detection is a heuristic: a wrong `prompt` gives either a warning (idle timeout) or a `commandtimeout` error;
+ - `commandtimeout` covers the whole command phase, `timeout` covers connect and login;
+ - devices that answer `\r\n` with a stray `^` are fine (pupirka sends a single CR), but a device that needs a different line ending cannot be configured yet.
+
+Troubleshooting a Telnet device:
+
+ - set `"level": "debug"` in `log.level` of `pupirka.config.json` and read `log/<device>/device.log`;
+ - the log shows the login steps, the `initcommand` calls, whether the prompt matched and how many bytes arrived;
+ - `TelnetClientRun: prompt not matched ... saving N bytes as is` means the output was saved but the prompt pattern does not fit the device - fix `prompt`;
+ - `commandtimeout exceeded` means the device never returned a prompt: increase `commandtimeout` or fix `prompt`.
+
 ## Config Pupirka
 
 If pupirka execute and file `pupirka.config.json` not found, pupirka created config and set all default parameter
@@ -152,11 +214,19 @@ format: json
   "devicedefault": {
     "clearstring":"",
     "command": "/export",
+    "commandtimeout": 0,
     "every": 3600,
     "filenameformat": "%p%t.rcs",
+    "idletimeout": 0,
+    "initcommand": "",
+    "enablepassword": "",
     "key": "",
     "portshh": 22,
+    "portssh": 22,
+    "porttelnet": 23,
     "prefix": "",
+    "prompt": "",
+    "protocol": "ssh",
     "rotate": 730,
     "timeformat": "20060102T1504",
     "timeout": 10,

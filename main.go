@@ -30,6 +30,13 @@ func init() {
 	ConfigV.SetDefault("path.log", "./log")
 	ConfigV.SetDefault("devicedefault.portshh", 22) //todo need delete
 	ConfigV.SetDefault("devicedefault.portssh", 22)
+	ConfigV.SetDefault("devicedefault.porttelnet", 23)
+	ConfigV.SetDefault("devicedefault.protocol", ProtocolSSH)
+	ConfigV.SetDefault("devicedefault.prompt", "")
+	ConfigV.SetDefault("devicedefault.initcommand", "")
+	ConfigV.SetDefault("devicedefault.enablepassword", "")
+	ConfigV.SetDefault("devicedefault.idletimeout", 0)
+	ConfigV.SetDefault("devicedefault.commandtimeout", 0)
 	ConfigV.SetDefault("devicedefault.timeout", 10)
 	ConfigV.SetDefault("devicedefault.every", 3600)
 	ConfigV.SetDefault("devicedefault.rotate", 730)
