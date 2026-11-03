@@ -219,6 +219,32 @@ Troubleshooting a Telnet device:
  - `TelnetClientRun: prompt not matched ... saving N bytes as is` means the output was saved but the prompt pattern does not fit the device - fix `prompt`;
  - `commandtimeout exceeded` means the device never returned a prompt: increase `commandtimeout` or fix `prompt`.
 
+### Upload to another server (scp)
+
+pupirka can copy the whole `backup` directory to another host after a run. It speaks the scp protocol over ssh itself - no external modules and no `rsync`/`scp` binary on the pupirka side, only the `scp` binary on the server (present on every unix host and NAS).
+
+```json
+"upload": {
+  "enabled": true,
+  "address": "backup.example.ru",
+  "port": 22,
+  "username": "backup",
+  "key": "id_ed25519",
+  "password": "",
+  "path": "/volume1/backups/pupirka",
+  "timeout": 120
+}
+```
+
+ - `key` - file name in the **keys** directory (the same `path.key` as for device keys, `./keys` by default). Leave it empty to use `password` instead. The key must be readable by the user that runs pupirka and must not require a passphrase for cron.
+ - `path` - destination directory. It is created with `mkdir -p` when missing, the tree is copied as `<path>/<device>/<file>`.
+ - `port` - ssh port of the server, 22 by default.
+ - `timeout` - limit for the whole upload in seconds (the session is closed when it expires).
+ - The upload runs **after** the backups and after `git push`, so the server gets exactly the committed tree. It is logged as `Upload: ... -> user@host:path` and `Upload: done, N files, M bytes`.
+ - An upload error is logged as `upload: ...` and does not abort the run, exactly like a failed git push.
+ - Files are overwritten, nothing is deleted: backups removed locally by `rotate` remain on the server as a second copy. If the server must be an exact mirror, use the `global.hook.post` with `rsync --delete` instead.
+ - The host key of the upload server is **not** verified (the same policy as for devices), so use a host on a trusted network.
+
 ## Config Pupirka
 
 If pupirka execute and file `pupirka.config.json` not found, pupirka created config and set all default parameter
@@ -258,6 +284,16 @@ format: json
       "user":"Pupirka",
       "email": "vk@mikrotik.me",
       "remote": ""
+   },
+  "upload": {
+      "enabled": false,
+      "address": "backup.example.ru",
+      "port": 22,
+      "username": "backup",
+      "key": "id_ed25519",
+      "password": "",
+      "path": "/volume1/backups/pupirka",
+      "timeout": 120
    },
   "log": {
     "format": "text",

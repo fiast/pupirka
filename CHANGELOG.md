@@ -9,6 +9,7 @@
 - hints in the ssh error for rejected credentials, deprecated crypto and 512-bit DSA host keys
 - ssh: a command that fails with a non-zero exit status now reports the device's own message (`Process exited with status 1: bad parameter sensitive`), not just the exit code
 - pager: Eltex `More: <space>, Quit: q or CTRL+Z` marker
+- upload: built-in scp upload of the whole backup tree to another host (`upload.*`), key from the `keys` directory or a password, no external modules; runs after the git push and logs `Upload: done, N files, M bytes`
 
 **Fixed bugs:**
 - Eltex `core-sw01`: `wait: remote command exited without exit status or exit signal` - the device now works through the interactive shell (526 lines, byte-stable across runs)

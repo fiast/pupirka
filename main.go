@@ -64,6 +64,14 @@ func init() {
 	ConfigV.SetDefault("git.user", "Pupirka")
 	ConfigV.SetDefault("git.password", "")
 	ConfigV.SetDefault("git.branch", "master")
+	ConfigV.SetDefault("upload.enabled", false)
+	ConfigV.SetDefault("upload.address", "")
+	ConfigV.SetDefault("upload.port", 22)
+	ConfigV.SetDefault("upload.username", "")
+	ConfigV.SetDefault("upload.password", "")
+	ConfigV.SetDefault("upload.key", "")
+	ConfigV.SetDefault("upload.path", "")
+	ConfigV.SetDefault("upload.timeout", 120)
 	if err := ConfigV.ReadInConfig(); err != nil { // error read config
 		log.Println(err)
 		_ = ConfigV.SafeWriteConfig()
@@ -133,6 +141,9 @@ func main() {
 	RunBackups(&Dev)
 	err := gitClient.CheckPush()
 	if err != nil {
+		LogConsole.Errorln(err)
+	}
+	if err := RunUpload(); err != nil {
 		LogConsole.Errorln(err)
 	}
 	RunnningGlobalHookPost()
