@@ -351,6 +351,16 @@ func SetDefaultParameter(d *Device) {
 	}
 	d.LogDebug("SetDefaultParameter: Set protocol ", d.Name, d.Protocol)
 
+	d.SSHMode = normalizeSSHMode(d.SSHMode)
+	if d.SSHMode == sshModeAuto {
+		d.SSHMode = normalizeSSHMode(ConfigV.GetString("devicedefault.sshmode"))
+	}
+	if d.SSHMode != sshModeAuto && d.Protocol == ProtocolTelnet {
+		d.LogWarn(fmt.Sprintf("SetDefaultParameter: \"sshmode\" is ignored for telnet device %s", d.Name))
+		d.SSHMode = sshModeAuto
+	}
+	d.LogDebug("SetDefaultParameter: Set sshmode ", d.Name, d.SSHMode)
+
 	if d.PortTelnet == 0 {
 		p := ConfigV.GetInt("devicedefault.porttelnet")
 		if p <= 0 || p > 65535 {

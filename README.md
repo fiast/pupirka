@@ -119,10 +119,11 @@ All supported parameter in `json` file for device
 
  - `portssh` - if your device running or access not 22 (default) port ssh, set needed tcp port.
  - `protocol` - how to reach the device: `"ssh"` (default) or `"telnet"`. Device files without this field keep working over SSH.
+ - `sshmode` - how to talk to the device over ssh: `"exec"` runs the command over an exec channel, `"shell"` opens an interactive CLI with a pty, empty (default) tries exec and falls back to the shell when the device answers nothing. `initcommand`, `commandtimeout` and `idletimeout` work in shell mode too.
  - `porttelnet` - tcp port for telnet, 23 by default.
  - `timeout` - if your device very slow response, set needed time wait in second. Used for connecting and for the login dialogue.
- - `commandtimeout` - how long to wait for the command output (seconds). Default is `timeout`. Telnet only.
- - `idletimeout` - how long to wait for any byte from the device before saving what arrived (seconds). Default is `timeout`. Telnet only.
+ - `commandtimeout` - how long to wait for the command output (seconds). Default is `timeout`. Telnet and ssh shell mode.
+ - `idletimeout` - how long to wait for any byte from the device before saving what arrived (seconds). Default is `timeout`. Telnet and ssh shell mode.
  - `every` - how often to backup, check the time of the last file and if the difference with the current time is greater than the time of the file, a backup will be created.
  - `rotate` - delete old files backups older than days. (in order not to accidentally delete all backups, the deletion will occur if ONLY the count of backup files is more than (5) five files.)
  - `command` - execute command on remote device, if you need backup only firewall in mikrotik (`/ip firewall export`). For telnet the command is typed into an interactive session, so vendor syntax applies (`show running-config` on Cisco/Eltex, `show running-config` or `/export` on MikroTik).
@@ -155,6 +156,19 @@ this string can be used next arguments
   - `%portssh` - Port ssh Device
 
 Pupirka **NOT** Wait execute command for devices.
+
+### SSH and old devices
+
+pupirka offers legacy algorithms on purpose: `diffie-hellman-group1-sha1`, `diffie-hellman-group14-sha1`, CBC ciphers, `ssh-rsa`/`ssh-dss` host keys and `hmac-sha1`. Devices that need SHA-1 work out of the box, no extra switch.
+
+What still cannot work:
+
+ - a device with a 512-bit DSA host key: Go's ssh rejects it (`unsupported DSA key size 512`), such a device must be backed up over telnet (`"protocol": "telnet"`);
+ - a device that rejects the password: the handshake succeeds and the log says `ssh: unable to authenticate, attempted methods [none password]` - that is a credentials or ssh-permission problem, not a cipher problem.
+
+Old CLI-only devices (Eltex MES and relatives) answer nothing over an exec channel: the command produces no output and no exit status. pupirka notices that and reopens the session as an interactive shell with a pty, then uses the same prompt detection as for telnet. `"sshmode": "shell"` forces this mode and saves one connection. In shell mode `initcommand` is executed first - on Eltex `"terminal datadump"` disables paging.
+
+If a device answers with a single line that looks like a CLI error (`bad parameter ...`, `% Invalid input`, `unknown command`, `syntax error`), pupirka fails the device instead of saving that line as a configuration.
 
 ### Telnet
 

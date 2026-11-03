@@ -10,6 +10,7 @@ type Device struct {
 	PortSSH        uint16         `json:"portssh"`
 	PortTelnet     uint16         `json:"porttelnet"`
 	Protocol       string         `json:"protocol"`
+	SSHMode        string         `json:"sshmode"`
 	Username       string         `json:"username"`
 	Password       string         `json:"password"`
 	Key            string         `json:"key"`

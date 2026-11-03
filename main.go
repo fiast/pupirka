@@ -32,6 +32,7 @@ func init() {
 	ConfigV.SetDefault("devicedefault.portssh", 22)
 	ConfigV.SetDefault("devicedefault.porttelnet", 23)
 	ConfigV.SetDefault("devicedefault.protocol", ProtocolSSH)
+	ConfigV.SetDefault("devicedefault.sshmode", "")
 	ConfigV.SetDefault("devicedefault.prompt", "")
 	ConfigV.SetDefault("devicedefault.initcommand", "")
 	ConfigV.SetDefault("devicedefault.enablepassword", "")

@@ -1,4 +1,17 @@
 # Changelog
+## v0.9 (2026-11-04)
+**Implemented enhancements:**
+- ssh: device parameter `sshmode` (`exec` | `shell` | auto) and an interactive CLI fallback for devices that return nothing over an exec channel (Eltex MES)
+- ssh: legacy algorithms for old gear - `ssh-rsa`/`ssh-dss` host keys, `hmac-sha1`, `hmac-sha1-96`
+- ssh: keyboard-interactive authentication as a fallback to password
+- ssh: tolerate a missing exit status (`ExitMissingError`) and keep the received data
+- fail the device when the output is obviously a CLI error message instead of saving it as a configuration
+- hints in the ssh error for rejected credentials, deprecated crypto and 512-bit DSA host keys
+- pager: Eltex `More: <space>, Quit: q or CTRL+Z` marker
+
+**Fixed bugs:**
+- Eltex `core-sw01`: `wait: remote command exited without exit status or exit signal` - the device now works through the interactive shell (526 lines, byte-stable across runs)
+
 ## v0.8 (2026-10-30)
 **Implemented enhancements:**
 - add telnet support: device parameter `"protocol": "telnet"`, ssh remains the default

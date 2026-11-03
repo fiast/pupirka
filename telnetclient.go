@@ -46,13 +46,14 @@ var (
 	// Pager markers of the vendors we meet:
 	//   Cisco/MikroTik/BDCOM "--More--",
 	//   Huawei/Eltex "<--- More --->",
+	//   Eltex MES "More: <space>,  Quit: q or CTRL+Z, One line: <return>",
 	//   EPON OLT "---- More ( Press 'Q' to break ) ----",
 	//   TP-Link "Press any key to continue (Q to quit)".
 	// The marker is taken up to the end of the line, so the rest of the
 	// sentence cannot leak into the backup.
-	reTelnetPager = regexp.MustCompile(`(?i)(-{2,}\s*more[^\r\n]*|<{1,3}-{2,}\s*more\s*-{2,}>?|press\s+any\s+key[^\r\n]*)`)
+	reTelnetPager = regexp.MustCompile(`(?i)(-{2,}\s*more[^\r\n]*|more:\s*<space>[^\r\n]*|<{1,3}-{2,}\s*more\s*-{2,}>?|press\s+any\s+key[^\r\n]*)`)
 	// A pager marker that occupies a whole line, with the blanks around it.
-	reTelnetPagerLine = regexp.MustCompile(`(?i)^\s*(-{2,}\s*more[^\r\n]*|<{1,3}-{2,}\s*more\s*-{2,}>?|press\s+any\s+key[^\r\n]*)\s*$`)
+	reTelnetPagerLine = regexp.MustCompile(`(?i)^\s*(-{2,}\s*more[^\r\n]*|more:\s*<space>[^\r\n]*|<{1,3}-{2,}\s*more\s*-{2,}>?|press\s+any\s+key[^\r\n]*)\s*$`)
 	// ANSI escape sequences (colour, cursor movement) some CLIs send.
 	reTelnetANSI = regexp.MustCompile(`\x1b\[[0-9;?]*[a-zA-Z]|\x1b\][^\x07\x1b]*(\x07|\x1b\\)|\x1b[()][A-Za-z0-9]|\x1b[=>]`)
 	// "char\b" pairs used by CLIs to erase a character.
@@ -183,6 +184,9 @@ func (s *telnetSession) Run() ([]byte, error) {
 	out := cleanTelnetOutput(raw, s.device.Command, s.prompt)
 	if len(bytes.TrimSpace(out)) == 0 {
 		return nil, errors.New("TelnetClientRun: empty output after removing echo and prompt")
+	}
+	if err := checkCommandResult(out); err != nil {
+		return nil, fmt.Errorf("TelnetClientRun: %w", err)
 	}
 	s.device.LogDebug(fmt.Sprintf("TelnetClientRun: got %d bytes for device %s", len(out), s.device.Name))
 	return out, nil
@@ -453,14 +457,20 @@ func telnetTrace(b []byte) string {
 
 // promptAtEnd reports whether the inspected tail ends with the device prompt.
 func (s *telnetSession) promptAtEnd(b []byte) bool {
-	if s.prompt == nil {
+	return promptMatchesTail(b, s.prompt)
+}
+
+// promptMatchesTail reports whether the tail of b matches the prompt pattern.
+// It is shared by the telnet client and the interactive SSH shell.
+func promptMatchesTail(b []byte, prompt *regexp.Regexp) bool {
+	if prompt == nil {
 		return false
 	}
 	t := trimPromptTail(b)
 	if len(t) == 0 {
 		return false
 	}
-	return s.prompt.Match(t)
+	return prompt.Match(t)
 }
 
 // trimPromptTail returns the last telnetTailSize bytes without trailing blanks,
@@ -481,11 +491,18 @@ func trimPromptTail(b []byte) []byte {
 
 // stripPager removes pager markers from buf and returns how many were removed.
 func (s *telnetSession) stripPager(buf []byte) ([]byte, int, bool) {
+	out, pages, truncated := stripPagerMarkers(buf)
+	s.pager += pages
+	return out, pages, truncated
+}
+
+// stripPagerMarkers cuts pager prompts out of buf. It is shared by the telnet
+// client and the interactive SSH shell.
+func stripPagerMarkers(buf []byte) ([]byte, int, bool) {
 	idx := reTelnetPager.FindAllIndex(buf, -1)
 	if len(idx) == 0 {
 		return buf, 0, false
 	}
-	s.pager += len(idx)
 	out := make([]byte, 0, len(buf))
 	prev := 0
 	truncated := false
