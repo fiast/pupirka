@@ -98,8 +98,9 @@ func sshExecRun(device *Device) ([]byte, error) {
 	}
 	defer session.Close()
 	device.LogDebug(fmt.Sprintf("SshClientRun: ssh session running %s", device.Name))
-	var b bytes.Buffer
+	var b, errB bytes.Buffer
 	session.Stdout = &b
+	session.Stderr = &errB
 
 	if err := session.Run(device.Command); err != nil {
 		if isSSHExitMissing(err) {
@@ -111,13 +112,35 @@ func sshExecRun(device *Device) ([]byte, error) {
 			}
 			return b.Bytes(), nil
 		}
-		return nil, errors.New("SshClientRun: Run command error:" + err.Error())
+		// A non-zero exit status is a real failure: the device usually explains
+		// itself ("bad parameter ...", "Command not found"), and without that
+		// text the log only says "Process exited with status 1".
+		return nil, errors.New("SshClientRun: Run command error:" + err.Error() + sshErrorDetail(b.Bytes(), errB.Bytes()))
 	}
 	device.LogDebug(fmt.Sprintf("SshClientRun: Read bytes good %s", device.Name))
 	if err := checkCommandResult(b.Bytes()); err != nil {
 		return nil, err
 	}
 	return b.Bytes(), nil
+}
+
+// sshErrorDetail renders the device reply for a command that failed with a
+// non-zero exit status, so the log shows why and not only the exit code.
+func sshErrorDetail(stdout, stderr []byte) string {
+	text := strings.TrimSpace(string(stderr))
+	if text == "" {
+		text = strings.TrimSpace(string(stdout))
+	}
+	if text == "" {
+		return ""
+	}
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		text = strings.TrimSpace(text[:i])
+	}
+	if len(text) > 200 {
+		text = text[:200] + "..."
+	}
+	return ": " + text
 }
 
 // sshDialHint adds a hint to the most common handshake failures.

@@ -7,6 +7,7 @@
 - ssh: tolerate a missing exit status (`ExitMissingError`) and keep the received data
 - fail the device when the output is obviously a CLI error message instead of saving it as a configuration
 - hints in the ssh error for rejected credentials, deprecated crypto and 512-bit DSA host keys
+- ssh: a command that fails with a non-zero exit status now reports the device's own message (`Process exited with status 1: bad parameter sensitive`), not just the exit code
 - pager: Eltex `More: <space>, Quit: q or CTRL+Z` marker
 
 **Fixed bugs:**
