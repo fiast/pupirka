@@ -322,6 +322,27 @@ Pupirka created all folder if not found.
    - `pre` running before backups
    - `post` running after all backups    
 
+The command is split on spaces and executed **without a shell**: quotes, pipes, `;` and redirects do not work, and its stdout goes to the pupirka log - so keep it quiet.
+
+Example - copy all backups to a NAS over ssh (key based auth, runs after the last device and waits for rsync):
+
+```json
+"global": {
+  "hook": {
+    "post": "rsync -a --rsync-path=/usr/bin/rsync /home/ivan/pupirka/backup/ backup@nas:/volume1/backups/pupirka/"
+  }
+}
+```
+
+Notes:
+ - the trailing slash on the source copies the **contents** of `backup`; without it rsync creates `.../pupirka/backup/`;
+ - put the key and the port in `~/.ssh/config` (`Host nas` / `IdentityFile`), `-e "ssh -i ..."` cannot be passed because the command is not parsed by a shell;
+ - the ssh key must work without a passphrase, otherwise cron cannot run it;
+ - add `--delete` only if the server must mirror the folder exactly (rotated files would be removed there too);
+ - a failure is logged as `Error HOOK ...` with the rsync message, but pupirka still exits with status 0.
+
+For a single device there is `hook.backup` in the device file (`scp ./backup/%name/%filename ...`), but note that it is started without waiting for the result and that `hook.skip` receives the name of a file that was not created.
+
 ## Time Format
 
 Used specified Golang format

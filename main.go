@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"github.com/juju/fslock"
 	"github.com/sirupsen/logrus"
@@ -171,6 +172,12 @@ func RunCommandInOS(command string) (string, error) {
 	execComandi := strings.Fields(command)
 	res, err := exec.Command(execComandi[0], execComandi[1:]...).Output()
 	if err != nil {
+		// exec.Output keeps stderr in ExitError; without it the log only says
+		// "exit status 23" and there is no way to see what rsync complained about.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && len(exitErr.Stderr) > 0 {
+			return "", fmt.Errorf("%w: %s", err, strings.TrimSpace(string(exitErr.Stderr)))
+		}
 		return "", err
 	}
 	return string(res), nil
